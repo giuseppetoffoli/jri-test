@@ -49,10 +49,9 @@
             try {
                 statusDiv.innerText = "Ricerca tracker...";
                 const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'JRI' }], // Cerca dispositivi che iniziano con JRI
-                    optionalServices: [JRI_SERVICE_UUID]
+                acceptAllDevices: true,      // Accetta tutto quello che trova
+                optionalServices: [JRI_SERVICE_UUID]
                 });
-
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService(JRI_SERVICE_UUID);
                 const characteristic = await service.getCharacteristic(JRI_CHAR_UUID);
