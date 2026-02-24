@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JRI Tracker - Web Dashboard</title>
+    <style>
+        body { font-family: sans-serif; background: #000; color: #fff; text-align: center; padding: 20px; }
+        .data-card { border: 2px solid #333; border-radius: 15px; padding: 20px; margin: 10px; background: #111; }
+        #salti { font-size: 80px; color: #00ff00; font-weight: bold; }
+        #timer { font-size: 40px; color: #ffff00; }
+        #batteria { font-size: 20px; color: #0066ff; }
+        button { background: #0066ff; color: white; border: none; padding: 15px 30px; border-radius: 10px; font-size: 20px; cursor: pointer; }
+        .status { color: #888; font-size: 14px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>JRI TRACKER</h1>
+    
+    <button id="connect">CONNETTI TRACKER</button>
+    <div id="status" class="status">Disconnesso</div>
+
+    <div class="data-card">
+        <div>SALTI</div>
+        <div id="salti">0</div>
+    </div>
+
+    <div class="data-card">
+        <div>TEMPO ALLENAMENTO</div>
+        <div id="timer">00:00</div>
+    </div>
+
+    <div class="data-card">
+        <div id="batteria">Batteria Tracker: --</div>
+    </div>
+
+    <script>
+        const connectButton = document.getElementById('connect');
+        const saltiDiv = document.getElementById('salti');
+        const timerDiv = document.getElementById('timer');
+        const battDiv = document.getElementById('batteria');
+        const statusDiv = document.getElementById('status');
+
+        // UUID del tuo Tracker JRI (dalla tua versione 1.5.0)
+        const JRI_SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
+        const JRI_CHAR_UUID    = '0000ffe1-0000-1000-8000-00805f9b34fb';
+
+        connectButton.addEventListener('click', async () => {
+            try {
+                statusDiv.innerText = "Ricerca tracker...";
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'JRI' }], // Cerca dispositivi che iniziano con JRI
+                    optionalServices: [JRI_SERVICE_UUID]
+                });
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(JRI_SERVICE_UUID);
+                const characteristic = await service.getCharacteristic(JRI_CHAR_UUID);
+
+                statusDiv.innerText = "Connesso!";
+                connectButton.style.display = 'none';
+
+                characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                    const value = new TextDecoder().decode(event.target.value);
+                    parseData(value);
+                });
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerText = "Errore: " + error;
+            }
+        });
+
+        function parseData(data) {
+            // Data arriva come: "S:12,T:00:45,B:85%"
+            const parts = data.split(',');
+            parts.forEach(part => {
+                if (part.startsWith('S:')) saltiDiv.innerText = part.substring(2);
+                if (part.startsWith('T:')) timerDiv.innerText = part.substring(2);
+                if (part.startsWith('B:')) battDiv.innerText = "Batteria Tracker: " + part.substring(2);
+            });
+        }
+    </script>
+</body>
+</html>
