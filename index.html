@@ -34,63 +34,70 @@
 
     <div id="batteria">Batteria: --</div>
 
+    // ... (mantenere HTML e CSS uguali) ...
+
     <script>
         const connectButton = document.getElementById('connect');
         const saltiDiv = document.getElementById('salti');
-        const timerDiv = document.getElementById('timer');
-        const battDiv = document.getElementById('batteria');
         const statusDiv = document.getElementById('status');
 
-        // UUID CORRETTI DALLA TUA FOTO (NORDIC UART)
         const JRI_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
         const JRI_CHAR_UUID    = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
+        let bluetoothDevice = null;
+
         connectButton.addEventListener('click', async () => {
             try {
-                statusDiv.innerText = "Ricerca 'nimble'...";
-                const device = await navigator.bluetooth.requestDevice({
+                // Se c'è già una vecchia connessione, proviamo a chiuderla
+                if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                    await bluetoothDevice.gatt.disconnect();
+                }
+
+                statusDiv.innerText = "Cercando NimBLE...";
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
                     filters: [{ name: 'nimble' }],
                     optionalServices: [JRI_SERVICE_UUID]
                 });
 
-                statusDiv.innerText = "Connessione in corso...";
-                const server = await device.gatt.connect();
+                // Ascolta la disconnessione per resettare l'interfaccia
+                bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+                statusDiv.innerText = "Connessione...";
+                const server = await bluetoothDevice.gatt.connect();
                 
-                statusDiv.innerText = "Sincronizzazione...";
+                statusDiv.innerText = "Lettura UART...";
                 const service = await server.getPrimaryService(JRI_SERVICE_UUID);
                 const characteristic = await service.getCharacteristic(JRI_CHAR_UUID);
 
                 await characteristic.startNotifications();
-                statusDiv.innerText = "TRACKER CONNESSO";
+                statusDiv.innerText = "ONLINE";
                 statusDiv.style.color = "#00ff00";
-                connectButton.style.display = 'none';
+                connectButton.innerText = "DISCONNETTI";
 
                 characteristic.addEventListener('characteristicvaluechanged', (event) => {
                     const value = new TextDecoder().decode(event.target.value);
-                    console.log("Dati ricevuti:", value); // Per debug
                     parseData(value);
                 });
 
-                // Gestione disconnessione
-                device.addEventListener('gattserverdisconnected', () => {
-                    statusDiv.innerText = "Connessione persa!";
-                    statusDiv.style.color = "red";
-                    connectButton.style.display = 'inline-block';
-                });
-
             } catch (error) {
-                console.error(error);
-                statusDiv.innerText = "Errore: " + error.message;
+                console.log(error);
+                statusDiv.innerText = "Reset richiesto. Spegni e riaccendi il Tracker.";
             }
         });
 
+        function onDisconnected() {
+            statusDiv.innerText = "Disconnesso. Riprova.";
+            statusDiv.style.color = "#888";
+            connectButton.innerText = "CONNETTI TRACKER";
+            connectButton.style.display = 'inline-block';
+        }
+
         function parseData(data) {
-            // Data arriva come: "S:12,T:00:45,B:85%"
             const parts = data.split(',');
             parts.forEach(part => {
                 if (part.startsWith('S:')) saltiDiv.innerText = part.substring(2);
                 if (part.startsWith('T:')) timerDiv.innerText = part.substring(2);
-                if (part.startsWith('B:')) battDiv.innerText = "Batteria Tracker: " + part.substring(2);
+                if (part.startsWith('B:')) document.getElementById('batteria').innerText = "Batteria: " + part.substring(2);
             });
         }
     </script>
