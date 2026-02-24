@@ -3,76 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JRI Tracker - Web Dashboard</title>
+    <title>JRI Tracker - Smartphone Dashboard</title>
     <style>
-        body { font-family: sans-serif; background: #000; color: #fff; text-align: center; padding: 20px; }
-        .data-card { border: 2px solid #333; border-radius: 15px; padding: 20px; margin: 10px; background: #111; }
-        #salti { font-size: 80px; color: #00ff00; font-weight: bold; }
-        #timer { font-size: 40px; color: #ffff00; }
-        #batteria { font-size: 20px; color: #0066ff; }
-        button { background: #0066ff; color: white; border: none; padding: 15px 30px; border-radius: 10px; font-size: 20px; cursor: pointer; }
-        .status { color: #888; font-size: 14px; margin-top: 10px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #000; color: #fff; text-align: center; padding: 20px; }
+        .data-card { border: 2px solid #333; border-radius: 20px; padding: 30px; margin: 15px auto; background: #111; max-width: 400px; box-shadow: 0 4px 15px rgba(0,255,0,0.1); }
+        #salti { font-size: 100px; color: #00ff00; font-weight: bold; line-height: 1; margin: 10px 0; }
+        #timer { font-size: 50px; color: #ffff00; font-family: monospace; }
+        #batteria { font-size: 18px; color: #0066ff; margin-top: 10px; }
+        button { background: #0066ff; color: white; border: none; padding: 20px 40px; border-radius: 50px; font-size: 22px; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(0,102,255,0.4); }
+        button:active { transform: scale(0.95); }
+        .status { color: #888; font-size: 16px; margin: 20px 0; }
+        h1 { color: #555; letter-spacing: 2px; font-size: 18px; }
     </style>
 </head>
 <body>
-    <h1>JRI TRACKER</h1>
+    <h1>JRI TRACKER SYSTEM</h1>
     
+    <div id="status" class="status">Pronto per la connessione</div>
     <button id="connect">CONNETTI TRACKER</button>
-    <div id="status" class="status">Disconnesso</div>
 
     <div class="data-card">
-        <div>SALTI</div>
+        <div style="font-size: 20px; color: #888;">SALTI</div>
         <div id="salti">0</div>
     </div>
 
     <div class="data-card">
-        <div>TEMPO ALLENAMENTO</div>
+        <div style="font-size: 18px; color: #888;">TEMPO</div>
         <div id="timer">00:00</div>
     </div>
 
-    <div class="data-card">
-        <div id="batteria">Batteria Tracker: --</div>
-    </div>
+    <div id="batteria">Batteria: --</div>
 
     <script>
+        const connectButton = document.getElementById('connect');
+        const saltiDiv = document.getElementById('salti');
+        const timerDiv = document.getElementById('timer');
+        const battDiv = document.getElementById('batteria');
+        const statusDiv = document.getElementById('status');
+
+        // UUID CORRETTI DALLA TUA FOTO (NORDIC UART)
+        const JRI_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+        const JRI_CHAR_UUID    = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
         connectButton.addEventListener('click', async () => {
-    try {
-        statusDiv.innerText = "Ricerca in corso...";
-        
-        // Versione super-compatibile: accetta tutto e dichiara l'UUID
-        const device = await navigator.bluetooth.requestDevice({
-            acceptAllDevices: true,
-            optionalServices: [JRI_SERVICE_UUID] 
+            try {
+                statusDiv.innerText = "Ricerca 'nimble'...";
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: 'nimble' }],
+                    optionalServices: [JRI_SERVICE_UUID]
+                });
+
+                statusDiv.innerText = "Connessione in corso...";
+                const server = await device.gatt.connect();
+                
+                statusDiv.innerText = "Sincronizzazione...";
+                const service = await server.getPrimaryService(JRI_SERVICE_UUID);
+                const characteristic = await service.getCharacteristic(JRI_CHAR_UUID);
+
+                await characteristic.startNotifications();
+                statusDiv.innerText = "TRACKER CONNESSO";
+                statusDiv.style.color = "#00ff00";
+                connectButton.style.display = 'none';
+
+                characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                    const value = new TextDecoder().decode(event.target.value);
+                    console.log("Dati ricevuti:", value); // Per debug
+                    parseData(value);
+                });
+
+                // Gestione disconnessione
+                device.addEventListener('gattserverdisconnected', () => {
+                    statusDiv.innerText = "Connessione persa!";
+                    statusDiv.style.color = "red";
+                    connectButton.style.display = 'inline-block';
+                });
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerText = "Errore: " + error.message;
+            }
         });
 
-        statusDiv.innerText = "Connessione a: " + device.name;
-        
-        const server = await device.gatt.connect();
-        statusDiv.innerText = "GATT Connesso, cerco servizio...";
-        
-        const service = await server.getPrimaryService(JRI_SERVICE_UUID);
-        const characteristic = await service.getCharacteristic(JRI_CHAR_UUID);
-
-        statusDiv.innerText = "TUTTO OK! Ricezione dati...";
-        connectButton.style.display = 'none';
-
-        characteristic.startNotifications();
-        characteristic.addEventListener('characteristicvaluechanged', (event) => {
-            const value = new TextDecoder().decode(event.target.value);
-            parseData(value);
-        });
-
-        // Gestione disconnessione
-        device.addEventListener('gattserverdisconnected', () => {
-            statusDiv.innerText = "Disconnesso! Ricarica pagina.";
-            connectButton.style.display = 'block';
-        });
-
-    } catch (error) {
-        console.log("ERRORE DETTAGLIATO:", error);
-        statusDiv.innerText = "Errore: " + error.message;
-    }
-});
+        function parseData(data) {
+            // Data arriva come: "S:12,T:00:45,B:85%"
+            const parts = data.split(',');
+            parts.forEach(part => {
+                if (part.startsWith('S:')) saltiDiv.innerText = part.substring(2);
+                if (part.startsWith('T:')) timerDiv.innerText = part.substring(2);
+                if (part.startsWith('B:')) battDiv.innerText = "Batteria Tracker: " + part.substring(2);
+            });
+        }
     </script>
 </body>
 </html>
