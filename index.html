@@ -35,51 +35,44 @@
     </div>
 
     <script>
-        const connectButton = document.getElementById('connect');
-        const saltiDiv = document.getElementById('salti');
-        const timerDiv = document.getElementById('timer');
-        const battDiv = document.getElementById('batteria');
-        const statusDiv = document.getElementById('status');
-
-        // UUID del tuo Tracker JRI (dalla tua versione 1.5.0)
-        const JRI_SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
-        const JRI_CHAR_UUID    = '0000ffe1-0000-1000-8000-00805f9b34fb';
-
         connectButton.addEventListener('click', async () => {
-            try {
-                statusDiv.innerText = "Ricerca tracker...";
-                const device = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,      // Accetta tutto quello che trova
-                optionalServices: [JRI_SERVICE_UUID]
-                });
-                const server = await device.gatt.connect();
-                const service = await server.getPrimaryService(JRI_SERVICE_UUID);
-                const characteristic = await service.getCharacteristic(JRI_CHAR_UUID);
-
-                statusDiv.innerText = "Connesso!";
-                connectButton.style.display = 'none';
-
-                characteristic.startNotifications();
-                characteristic.addEventListener('characteristicvaluechanged', (event) => {
-                    const value = new TextDecoder().decode(event.target.value);
-                    parseData(value);
-                });
-
-            } catch (error) {
-                console.error(error);
-                statusDiv.innerText = "Errore: " + error;
-            }
+    try {
+        statusDiv.innerText = "Ricerca in corso...";
+        
+        // Versione super-compatibile: accetta tutto e dichiara l'UUID
+        const device = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: [JRI_SERVICE_UUID] 
         });
 
-        function parseData(data) {
-            // Data arriva come: "S:12,T:00:45,B:85%"
-            const parts = data.split(',');
-            parts.forEach(part => {
-                if (part.startsWith('S:')) saltiDiv.innerText = part.substring(2);
-                if (part.startsWith('T:')) timerDiv.innerText = part.substring(2);
-                if (part.startsWith('B:')) battDiv.innerText = "Batteria Tracker: " + part.substring(2);
-            });
-        }
+        statusDiv.innerText = "Connessione a: " + device.name;
+        
+        const server = await device.gatt.connect();
+        statusDiv.innerText = "GATT Connesso, cerco servizio...";
+        
+        const service = await server.getPrimaryService(JRI_SERVICE_UUID);
+        const characteristic = await service.getCharacteristic(JRI_CHAR_UUID);
+
+        statusDiv.innerText = "TUTTO OK! Ricezione dati...";
+        connectButton.style.display = 'none';
+
+        characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', (event) => {
+            const value = new TextDecoder().decode(event.target.value);
+            parseData(value);
+        });
+
+        // Gestione disconnessione
+        device.addEventListener('gattserverdisconnected', () => {
+            statusDiv.innerText = "Disconnesso! Ricarica pagina.";
+            connectButton.style.display = 'block';
+        });
+
+    } catch (error) {
+        console.log("ERRORE DETTAGLIATO:", error);
+        statusDiv.innerText = "Errore: " + error.message;
+    }
+});
     </script>
 </body>
 </html>
